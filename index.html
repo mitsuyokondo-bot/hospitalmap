@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>医療機関マップ（P04-20_14.geojson）</title>
+
+  <!-- Leaflet の CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    .leaflet-popup-content {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .facility-type {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Leaflet の JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // ● 医療機関種別コード → ラベル
+    const typeMap = {
+      1: "病院",
+      2: "診療所",
+      3: "歯科診療所"
+    };
+
+    // ● 地図の初期化（適当な日本付近の中心：後でfitBoundsで調整）
+    const map = L.map("map").setView([35.0, 135.0], 5);
+
+    // ● ベースマップ（OpenStreetMap）
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // ● GeoJSON ファイル（同じフォルダにある前提）
+    const geojsonUrl = "P04-20_14.geojson";
+
+    // ● GeoJSON を読み込んで地図にプロット
+    fetch(geojsonUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("GeoJSONファイルの読み込みに失敗しました: " + response.status);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Point → circleMarker に変換（見やすくするため）
+        const geojsonLayer = L.geoJSON(data, {
+          pointToLayer: (feature, latlng) => {
+            const t = feature.properties?.P04_001;
+            let color = "#3388ff";
+            if (t === 1) color = "#d00000";      // 病院：赤
+            else if (t === 2) color = "#0077b6"; // 診療所：青
+            else if (t === 3) color = "#008000"; // 歯科診療所：緑
+
+            return L.circleMarker(latlng, {
+              radius: 4,
+              fillColor: color,
+              color: color,
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.8
+            });
+          },
+          onEachFeature: (feature, layer) => {
+            const p = feature.properties || {};
+            const typeCode = p.P04_001;
+            const typeLabel = typeMap[typeCode] || "不明";
+            const name = p.P04_002 || "(名称不明)";
+            const addr = p.P04_003 || "";
+            const dept = p.P04_004 || "";
+
+            const popupHtml = `
+              <div class="facility-popup">
+                <div class="facility-type">${typeLabel}</div>
+                <div><strong>${name}</strong></div>
+                ${addr ? `<div>住所：${addr}</div>` : ""}
+                ${dept ? `<div>診療科：${dept}</div>` : ""}
+                ${typeCode != null ? `<div>種別コード：${typeCode}</div>` : ""}
+              </div>
+            `;
+            layer.bindPopup(popupHtml);
+          }
+        }).addTo(map);
+
+        // すべての施設が入るように地図範囲を自動調整
+        try {
+          const bounds = geojsonLayer.getBounds();
+          if (bounds.isValid()) {
+            map.fitBounds(bounds.pad(0.05)); // 少し余白をつける
+          }
+        } catch (e) {
+          console.warn("範囲の取得に失敗しました:", e);
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        alert("GeoJSONの読み込み中にエラーが発生しました。コンソールを確認してください。");
+      });
+  </script>
+</body>
+</html>
